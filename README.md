@@ -2,7 +2,9 @@
 
 A lightweight Vision-Language Model (VLM) built from scratch using a pretrained Vision Transformer and a LoRA-tuned LLaMA 3.2 language model.
 
-The trained model will be uploaded in Releases due to size limitations from GitHub. Move it into `checkpoints\` for proper use.
+The trained model will be uploaded in Huggingface due to size limitations from GitHub. Move it into `checkpoints\` for proper use.
+
+Model Download Link: https://huggingface.co/RadiumLR/Siglip-LLama3.2-VLM-Model
 
 Please download LLaMA model and json files into `Llama-3.2-3B\` for training or inference.
 
