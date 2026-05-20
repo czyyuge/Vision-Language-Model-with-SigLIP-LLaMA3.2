@@ -55,10 +55,14 @@ class VisionLLM(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(llm_path)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.add_tokens(["<image>"])
+        
         self.llm = AutoModelForCausalLM.from_pretrained(
             llm_path,
             torch_dtype=torch.bfloat16,
             #device_map="auto"
+        )
+        self.llm.resize_token_embeddings(
+            len(self.tokenizer)
         )
         lora_config = LoraConfig(
             r=16,
@@ -135,6 +139,119 @@ class VisionLLM(nn.Module):
         )
 
         return outputs
+    def generate(self, image, max_new_tokens=40):
+
+        self.eval()
+
+        with torch.no_grad():
+
+            # =========================
+            # Vision Encoder
+            # =========================
+            vision_outputs = self.vision(
+                pixel_values=image.to(self.vision.dtype)
+            )
+
+            vision_feat = vision_outputs.last_hidden_state[:, 1:65]
+
+            vision_feat = vision_feat.to(torch.bfloat16)
+
+            # =========================
+            # Projector
+            # =========================
+            visual_emb = self.projector(vision_feat)
+
+            B, N, _ = visual_emb.shape
+
+            visual_emb = visual_emb + self.visual_pos_embed[:, :N, :]
+
+            # =========================
+            # Image Special Tokens
+            # =========================
+            img_start = self.img_start_token.expand(B, -1, -1).to(
+                visual_emb.device,
+                dtype=visual_emb.dtype
+            )
+
+            img_end = self.img_end_token.expand(B, -1, -1).to(
+                visual_emb.device,
+                dtype=visual_emb.dtype
+            )
+
+            # =========================
+            # Prompt
+            # =========================
+            prompt = "User: <image>\nDescribe this image.\nAssistant:"
+
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt"
+            ).to(image.device)
+
+            # =========================
+            # Text Embedding
+            # =========================
+            text_emb = self.llm.get_input_embeddings()(
+                inputs.input_ids
+            )
+
+            text_emb = text_emb.to(torch.bfloat16)
+
+            # =========================
+            # Combine Embeddings
+            # =========================
+            inputs_embeds = torch.cat(
+                [
+                    img_start,
+                    visual_emb,
+                    img_end,
+                    text_emb
+                ],
+                dim=1
+            )
+
+            # =========================
+            # Attention Mask
+            # =========================
+            visual_mask = torch.ones(
+                (B, N + 2),
+                dtype=inputs.attention_mask.dtype,
+                device=image.device
+            )
+
+            attention_mask = torch.cat(
+                [
+                    visual_mask,
+                    inputs.attention_mask
+                ],
+                dim=1
+            )
+
+            # =========================
+            # Generate
+            # =========================
+            output_ids = self.llm.generate(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                bos_token_id=self.tokenizer.bos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+            )
+
+            text = self.tokenizer.decode(
+                output_ids[0],
+                skip_special_tokens=True
+            )
+
+            # =========================
+            # Clean Output
+            # =========================
+            if "Assistant:" in text:
+                text = text.split("Assistant:")[-1]
+
+            return text.strip()
 
 def save_checkpoint(model, optimizer, epoch, step, loss, save_path):
     if not os.path.exists(save_path):
@@ -157,6 +274,7 @@ def save_checkpoint(model, optimizer, epoch, step, loss, save_path):
     # 同时保存一次 tokenizer，防止丢失
     model.tokenizer.save_pretrained(save_path)
     print(f"--- Checkpoint 已保存至: {full_path} ---")
+
 # ======================
 # 3. Freeze
 # ======================
