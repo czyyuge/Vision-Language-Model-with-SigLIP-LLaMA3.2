@@ -328,20 +328,23 @@ def main():
     model.to(device)
     trainable_params = [p for p in model.llm.parameters() if p.requires_grad]
     accum_steps = 8
-    optimizer = AdamW(trainable_params, lr=3e-6)
+    optimizer = AdamW(trainable_params, lr=1e-6)
     optimizer.zero_grad()
-    resume_path = r"D:\prj_wsl\saved_models\coco_3e-6\checkpoint_epoch0_step56000.pth"
+    resume_path = r"D:\prj_wsl\saved_models\mar-1948\checkpoint_epoch0_step4000.pth"
 
     if os.path.exists(resume_path):
         print(f"加载checkpoint: {resume_path}")
 
         checkpoint = torch.load(resume_path, map_location="cpu")
-
+        keys_to_delete = [k for k in checkpoint['model_state_dict'].keys() if "embed_tokens.weight" in k or "lm_head.weight" in k]
+        for k in keys_to_delete:
+            checkpoint['model_state_dict'].pop(k,None)
+            print(f"Removing conflict weight: {k}")
         model.load_state_dict(checkpoint['model_state_dict'], strict=False)
 
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         for param_group in optimizer.param_groups:
-            param_group['lr']=3e-6
+            param_group['lr']=1e-6
 
         start_epoch = 0
         start_step = 0
