@@ -224,6 +224,8 @@ pip install torch transformers peft pillow opencv-python
 
 本项目 Fork 自 [XiaoKaite/Vision-Language-Model-with-SigLIP-LLaMA3.2](https://github.com/XiaoKaite/Vision-Language-Model-with-SigLIP-LLaMA3.2)，在其 VLM 模型基础上增加了视频抽帧与批量推理管道。
 
+原作者 HuggingFace：[RadiumLR](https://huggingface.co/RadiumLR)，训练好的模型权重托管于 [Siglip-LLama3.2-VLM-Model](https://huggingface.co/RadiumLR/Siglip-LLama3.2-VLM-Model)。
+
 模型部分受 LLaVA、MiniGPT-4 启发。
 
 ## License
