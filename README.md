@@ -1,238 +1,162 @@
-# Vision-Language Model with SigLIP + LLaMA3.2
+# Video-to-Text: 视频逐秒抽帧 + VLM 看图说话
 
-A lightweight Vision-Language Model (VLM) built from scratch using a pretrained Vision Transformer and a LoRA-tuned LLaMA 3.2 language model.
+输入一段视频，按每秒切分帧画面，通过训练好的 SigLIP + LLaMA 3.2 视觉语言模型（VLM）为每一帧生成自然语言描述。
 
-The trained model will be uploaded in Huggingface due to size limitations from GitHub. Move it into `checkpoints\` for proper use.
+支持的场景：视频内容摘要、监控关键帧提取、辅助标注等。
 
-Model Download Link: https://huggingface.co/RadiumLR/Siglip-LLama3.2-VLM-Model
-
-Please download LLaMA model and json files into `Llama-3.2-3B\` for training or inference.
-
-***PLEASE MODIFY ALL PATHS IN EVERY PYTHON FILE FOR PROPER DEPLOYMENT***
-
-This project implements the core ideas behind modern multimodal systems such as LLaVA and MiniGPT-4:
+## 整体流程
 
 ```
-Image → Vision Encoder → Projector → LLM → Text
+视频输入 → 每秒抽帧 → VLM 推理 → 逐帧描述输出（JSON）
 ```
 
-The model is capable of generating natural language descriptions from images after multimodal alignment training.
+## 模型架构
 
-# Quantative Evaluation
-
-Evaluations on main-stream metrics for vision-language models:
-
-| Metric | Score | Key Focus |
-| --- | --- | --- |
-| **CIDEr** | **0.6093** | Image Captioning TF-IDF human consensus score |
-| **ROUGE-L** | **0.3541** | Longest Common Subsequence language fluency |
-| **METEOR** | **0.2455** | Strict word stemming & synonym matching accuracy |
-| **BLEU-1** | **0.0238** | Exact n-gram precision word-matching |
-
-**Note on Metrics:** As an autoregressive Language Model (LLaMA 3.2), the model tends to enrich description details (e.g., adding environment contexts) which naturally penalizes strict word matching metrics like BLEU, while capturing superb semantic focus as reflected by high CIDEr score.
-
-
-# Features
-
-- SigLIP Vision Transformer encoder
-
-- Multi-token visual feature alignment
-
-- Learnable positional embeddings for visual tokens
-
-- MLP projector for vision-language alignment
-
-- LLaMA 3.2 Instruct as language backbone
-
-- LoRA fine-tuning for efficient training
-
-- Image caption generation
-
-- Flickr30k training + COCO transfer learning
-
-- Custom multimodal training pipeline implemented in PyTorch
-
-# Model Architecture
+基于 **SigLIP ViT** 视觉编码器 + **LLaMA 3.2 (3B) Instruct** 语言主干，受 LLaVA / MiniGPT-4 启发：
 
 ```
-                ┌─────────────────┐
-Image ────────► │  SigLIP ViT     │
-                └────────┬────────┘
-                         │
-                  Visual Tokens
-                         │
-                ┌────────▼────────┐
-                │  MLP Projector  │
-                └────────┬────────┘
-                         │
-          Visual Embeddings + Position Embeddings
-                         │
-         <IMG_START> ... <IMG_END>
-                         │
-                ┌────────▼────────┐
-                │  LLaMA 3.2 LLM │
-                └─────────────────┘
-                         │
-                    Generated Text
+Image ────────► SigLIP ViT ────────► Visual Tokens
+                                          │
+                                    MLP Projector
+                                          │
+                              Visual Embeddings + Pos Embed
+                                          │
+                           <IMG_START> ... <IMG_END>
+                                          │
+                                    LLaMA 3.2 LLM ────► Generated Text
 ```
 
-# Training Strategy
+关键技术点：
 
-***Stage 1 — Flickr30k Alignment Training***
+- **Multi-Token 视觉注入**：使用 patch-level 视觉 token（64个），而非仅 CLS token，保留空间信息
+- **可学习视觉位置编码**：投影后叠加位置信息，防止空间语义丢失
+- **模态分隔符**：`<IMG_START> ... <IMG_END>` 包裹视觉 token，提升多模态对齐稳定性
+- **LoRA 微调**：低秩适配器降低显存开销，消费级显卡即可训练
 
-Dataset:
+## 训练策略
 
-  - Flickr30k
+| Stage | 数据集 | 目的 | GPU |
+|---|---|---|---|
+| Stage 1 | Flickr30k | 视觉-语言初始对齐 | AMD RX 7900 XTX 24GB |
+| Stage 2 | MS COCO | 提升描述质量与泛化 | NVIDIA RTX 3080 20GB |
 
-Purpose:
+训练内容：MLP 投影器 + LoRA 微调 LLaMA + 视觉位置编码 + 模态分隔 token。
 
-  - Initial multimodal alignment between visual and language embeddings.
+## 评估指标
 
-Hardware:
+| 指标 | 得分 | 说明 |
+|---|---|---|
+| CIDEr | 0.6093 | 语义一致性高，捕获描述主旨 |
+| ROUGE-L | 0.3541 | 语言流畅度 |
+| METEOR | 0.2455 | 词干/同义词匹配 |
+| BLEU-1 | 0.0238 | 自回归模型倾向丰富细节，非逐字匹配 |
 
-  - AMD Radeon RX 7900 XTX (24GB VRAM)
+## 项目结构
 
-Training:
+```
+├── run.py               # 一键：视频 → 抽帧 → 推理
+├── extract_frames.py    # 视频每秒抽帧
+├── batch_inference.py   # 批量 VLM 推理
+├── inference.py         # 单图推理
+├── train.py             # 模型训练
+├── evaluation.py        # 模型评估
+├── merge.py             # LoRA 权重合并
+├── checkpoints/         # 训练好的模型权重
+├── Llama-3.2-3B/        # LLaMA 3.2 基座模型
+└── testpics/            # 测试图片
+```
 
-  - Train MLP projector
+## 环境依赖
 
-  - LoRA fine-tuning on LLaMA 3.2
+```bash
+pip install torch transformers peft pillow opencv-python
+```
 
-  - Multi-token visual embedding alignment
+## 模型准备
 
-  - Learnable visual positional embeddings
+| 组件 | 来源 | 存放路径 |
+|---|---|---|
+| LLaMA 3.2 (3B) 基座 | Meta 官方下载 | `Llama-3.2-3B/` |
+| 训练好的 checkpoint | [HuggingFace](https://huggingface.co/RadiumLR/Siglip-LLama3.2-VLM-Model) | `checkpoints/` |
 
-  - Modality separator tokens
+> **注意：** 所有 Python 文件中的路径变量请根据本地实际路径修改。
 
-***Stage 2 — COCO Transfer Learning***
+## 使用方法
 
+### 方式一：一键运行（推荐）
 
-Dataset:
+```bash
+python run.py video.mp4 \
+  -o results.json \
+  --llama ./Llama-3.2-3B \
+  --checkpoint ./checkpoints/checkpoint_epoch1_step28000.pth
+```
 
-  - MS COCO
+### 方式二：分步运行
 
-Purpose:
+**Step 1 — 抽帧**
 
-  - Improve caption quality and generalization ability.
+```bash
+python extract_frames.py video.mp4 -o ./frames
+```
 
-Hardware:
+**Step 2 — 批量推理**
 
-  - NVIDIA RTX 3080 20GB (modified edition)
+```bash
+python batch_inference.py \
+  --input ./frames \
+  --output results.json \
+  --llama ./Llama-3.2-3B \
+  --checkpoint ./checkpoints/checkpoint_epoch1_step28000.pth
+```
 
-Training:
+### 命令行参数
 
-  - Continued multimodal alignment with LoRA fine-tuning
+| 脚本 | 参数 | 说明 | 默认值 |
+|---|---|---|---|
+| `extract_frames.py` | `video` | 输入视频路径（必填） | — |
+| | `-o` / `--output` | 输出图片目录 | `frames` |
+| | `-p` / `--prefix` | 文件名前缀 | `frame` |
+| `batch_inference.py` | `--input` | 抽帧图片目录（必填） | — |
+| | `--output` | 结果输出 JSON 路径 | `results.json` |
+| | `--llama` | LLaMA 基座模型目录（必填） | — |
+| | `--checkpoint` | checkpoint .pth 路径（必填） | — |
+| | `--prompt` | 每帧的推理提示词 | `Describe this image in detail.` |
+| `run.py` | `video` | 输入视频路径（必填） | — |
+| | `-o` / `--output` | 结果输出 JSON 路径 | `results.json` |
+| | `--llama` | LLaMA 基座模型目录（必填） | — |
+| | `--checkpoint` | checkpoint .pth 路径（必填） | — |
+| | `--frames-dir` | 临时抽帧存放目录 | `frames` |
+| | `--prompt` | 每帧的推理提示词 | `Describe this image in detail.` |
 
-  - Instruction-style prompting
+### 输出格式（results.json）
 
-# Technologies Used
+```json
+[
+  {"time_sec": 0, "frame": "frame_0000s.jpg", "caption": "A large jetliner is parked on the runway."},
+  {"time_sec": 1, "frame": "frame_0001s.jpg", "caption": "The plane is taxiing towards the terminal."},
+  {"time_sec": 2, "frame": "frame_0002s.jpg", "caption": "Ground crew is preparing the aircraft for departure."}
+]
+```
 
-***Core Frameworks***
-
-  - PyTorch
-
-  - Transformers
-
-  - PEFT
-
-***Models***
-
-  - SigLIP
-  
-  - LLaMA 3.2 Instruct
-
-# Key Implementations
-
-***Multi-Token Vision Injection***
-
-Instead of using only the CLS token, patch-level visual tokens are injected into the LLM:
+### 单图推理（原项目用法）
 
 ```python
-vision_feat = vision_outputs.last_hidden_state[:, 1:65]
+from inference import run_inference
+run_inference("path/to/image.jpg", "Describe this image in detail.")
 ```
 
-***Learnable Visual Position Embedding***
+## 示例输出
 
-```python
-visual_emb = visual_emb + self.visual_pos_embed[:, :N, :]
-```
-
-This preserves spatial information after projection into language embedding space.
-
-***Modality Separator Tokens***
-
-```
-<IMG_START> [VISUAL TOKENS] <IMG_END>
-```
-
-Improves multimodal alignment stability and generation quality.
-
-# LoRA Fine-Tuning
-
-Efficient adaptation of the language model using Low-Rank Adaptation (LoRA), reducing memory usage significantly compared to all-layer-tuning while maintaining strong language generation capability.
-
-# Example Outputs
-
-***Example 1***
-
-Input:
-
-![Input Picture: ](testpics/testpic1.jpg)
-
-Output:
-
-```
-A large jetliner is parked on the runway.
-```
-
-Example 2
-
-Input:
-
-![Input Picture: ](testpics/testpic2.jpg)
-
-Output:
-
-```
- A police officer on a motorcycle on a city street.
-```
-
-# Results
-
-The model successfully learned cross-modal alignment between images and language and was able to generate coherent image captions from unseen images.
-
-Despite using a lightweight architecture and consumer hardware, the system achieved functional multimodal understanding and stable text generation.
-
-# Hardware
-| Stage |	GPU |
+| 输入 | 输出 |
 |---|---|
-| Flickr30k Training	| AMD Radeon RX 7900 XTX 24GB |
-| COCO Transfer Learning | NVIDIA RTX 3080 20GB Mod |
+| 飞机跑道图 | "A large jetliner is parked on the runway." |
+| 摩托车交警图 | "A police officer on a motorcycle on a city street." |
 
-# Project Structure
+## Acknowledgements
 
-├── train.py
+灵感来源：LLaVA、MiniGPT-4
 
-├── inference.py
+## License
 
-├── Llama-3.2-3B
-
-├── merge.py
-
-├── checkpoints/
-
-├── testpics/
-
-└── README.md
-
-# Acknowledgements
-
-***Inspired by:***
-
-  - LLaVA
-
-  - MiniGPT-4
-
-# License
-
-Follows to licenses from Siglip and LLaMA (if any).
+遵循 SigLIP 及 LLaMA 的原始许可。

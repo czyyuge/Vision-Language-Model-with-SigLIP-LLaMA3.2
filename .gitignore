@@ -1,0 +1,7 @@
+Llama-3.2-3B/
+checkpoints/
+__pycache__/
+*.pyc
+.DS_Store
+frames/
+*.pth
