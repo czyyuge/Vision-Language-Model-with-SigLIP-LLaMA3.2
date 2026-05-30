@@ -31,6 +31,14 @@ class VideoCaptioner:
         self.model.tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir)
         self.model.tokenizer.pad_token = self.model.tokenizer.eos_token
 
+        # 对齐模型 vocab_size 与 checkpoint，防止维度不匹配导致崩溃
+        for k, v in state_dict.items():
+            if k.endswith("embed_tokens.weight"):
+                ckpt_vocab_size = v.size(0)
+                self.model.llm.base_model.resize_token_embeddings(ckpt_vocab_size)
+                print(f"Adjusted embed_tokens vocab size to {ckpt_vocab_size}")
+                break
+
         self.model.load_state_dict(state_dict, strict=False)
         self.model.to(self.device, dtype=self.dtype)
         self.model.eval()
