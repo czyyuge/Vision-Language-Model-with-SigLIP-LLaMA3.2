@@ -40,6 +40,8 @@ python run.py 你的视频.mp4 --llama ./Llama-3.2-3B --checkpoint ./checkpoints
 
 其中的 `xxx.pth` 替换为实际下载的 checkpoint 文件名。
 
+命令执行完毕后，浏览器会自动打开一个本地页面（http://localhost:8000/viewer.html），你可以在搜索框中输入关键词，快速定位到对应的帧和描述。
+
 ---
 
 ## run.py 参数详解
@@ -56,6 +58,8 @@ python run.py <video> --llama <dir> --checkpoint <file> [可选参数...]
 | `-o` / `--output` | 否 | `results.json` | 推理结果保存到的 JSON 文件路径 |
 | `--frames-dir` | 否 | `frames` | 抽帧图片的暂存目录，跑完后不会自动删除 |
 | `--prompt` | 否 | `Describe this image in detail.` | 对每一帧向模型提问的文本 |
+| `--output-html` | 否 | `viewer.html` | 生成的可搜索 HTML 页面文件名 |
+| `--port` | 否 | `8000` | 本地预览服务的端口号（若被占用可修改） |
 
 ### 最小运行命令
 
@@ -77,7 +81,9 @@ python run.py my_video.mp4 \
   --llama ./Llama-3.2-3B \
   --checkpoint ./checkpoints/checkpoint_epoch1_step28000.pth \
   --frames-dir ./temp_frames \
-  --prompt "What is happening in this scene?"
+  --prompt "What is happening in this scene?" \
+  --output-html ./output/search.html \
+  --port 8080
 ```
 
 ---
@@ -126,6 +132,31 @@ python batch_inference.py \
 | `--output` | 否 | `results.json` | 结果输出 JSON 路径 |
 | `--prompt` | 否 | `Describe this image in detail.` | 每帧的推理提示词 |
 
+### 第三步：生成可搜索网页
+
+```bash
+python generate_viewer.py \
+  --results results.json \
+  --frames-dir frames \
+  -o viewer.html
+```
+
+| 参数 | 必填 | 默认值 | 说明 |
+|---|---|---|---|
+| `--results` | **是** | — | 存放描述结果的 JSON 文件路径 |
+| `--frames-dir` | **是** | — | 帧图片所在目录 |
+| `-o` / `--output` | 否 | `viewer.html` | 输出的 HTML 文件名 |
+
+### 第四步：本地预览
+
+在项目根目录（包含 `viewer.html` 和 `frames/` 的文件夹）启动 HTTP 服务：
+
+```bash
+python -m http.server 8000
+```
+
+浏览器打开 `http://localhost:8000/viewer.html` 即可使用搜索功能。
+
 ---
 
 ## 输出格式
@@ -145,6 +176,14 @@ python batch_inference.py \
 | `time_sec` | 帧在视频中的秒数 |
 | `frame` | 帧图片文件名 |
 | `caption` | 模型生成的描述文本 |
+
+### viewer.html
+
+一个独立的、带搜索功能的网页，包含：
+- **实时搜索**：在顶部输入框输入关键词，页面会过滤出所有描述中包含该词的帧。
+- **缩略图 + 时间戳**：每条结果都展示对应时间的图片、秒数和完整描述。
+- **点击放大**：点击图片可全屏查看原图。
+- 无需额外后端，双击无法打开时请使用本地 HTTP 服务器（`python -m http.server`）访问。
 
 ---
 
@@ -202,16 +241,20 @@ Image → SigLIP ViT → MLP Projector → <IMG_START> ... <IMG_END> → LLaMA 3
 ## 项目结构
 
 ```
-├── run.py               # 一键串联脚本
+├── run.py               # 一键串联脚本（抽帧 + 推理 + 生成网页 + 自动打开）
 ├── extract_frames.py    # 视频每秒抽帧
 ├── batch_inference.py   # 批量 VLM 推理
+├── generate_viewer.py   # 生成可搜索 HTML 索引页（新增）
 ├── inference.py         # 单图推理（原项目）
 ├── train.py             # 模型训练（原项目）
 ├── evaluation.py        # 模型评估（原项目）
 ├── merge.py             # LoRA 权重合并（原项目）
 ├── checkpoints/         # 训练好的模型权重（需下载）
 ├── Llama-3.2-3B/        # LLaMA 基座模型（需下载）
-└── testpics/            # 测试图片
+├── testpics/            # 测试图片
+├── frames/              # （运行后生成）抽取的帧图片
+├── results.json         # （运行后生成）逐帧描述
+└── viewer.html          # （运行后生成）可检索网页
 ```
 
 ## 环境依赖
@@ -222,7 +265,7 @@ pip install torch transformers peft pillow opencv-python
 
 ## Acknowledgements
 
-本项目 Fork 自 [XiaoKaite/Vision-Language-Model-with-SigLIP-LLaMA3.2](https://github.com/XiaoKaite/Vision-Language-Model-with-SigLIP-LLaMA3.2)，在其 VLM 模型基础上增加了视频抽帧与批量推理管道。
+本项目 Fork 自 [XiaoKaite/Vision-Language-Model-with-SigLIP-LLaMA3.2](https://github.com/XiaoKaite/Vision-Language-Model-with-SigLIP-LLaMA3.2)，在其 VLM 模型基础上增加了视频抽帧、批量推理与交互式检索页面。
 
 原作者 HuggingFace：[RadiumLR](https://huggingface.co/RadiumLR)，训练好的模型权重托管于 [Siglip-LLama3.2-VLM-Model](https://huggingface.co/RadiumLR/Siglip-LLama3.2-VLM-Model)。
 
