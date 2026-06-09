@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 frames/
 *.pth
+*.mp4
+results.json
+viewer.html
