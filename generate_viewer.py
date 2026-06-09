@@ -77,7 +77,7 @@ def generate_viewer(results_path, frames_dir, output_path="viewer.html"):
     <script>
         // 所有数据（由 Python 生成时注入）
         const DATA = {data_json};
-        const FRAMES_DIR = "{os.path.basename(frames_dir)}/"; // 图片目录名
+        const FRAMES_DIR = "{frames_dir}/";
 
         const searchInput = document.getElementById('search');
         const gallery = document.getElementById('gallery');

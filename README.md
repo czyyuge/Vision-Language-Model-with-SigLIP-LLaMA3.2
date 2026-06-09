@@ -40,7 +40,14 @@ python run.py 你的视频.mp4 --llama ./Llama-3.2-3B --checkpoint ./checkpoints
 
 其中的 `xxx.pth` 替换为实际下载的 checkpoint 文件名。
 
-命令执行完毕后，浏览器会自动打开一个本地页面（http://localhost:8000/viewer.html），你可以在搜索框中输入关键词，快速定位到对应的帧和描述。
+命令执行完毕后，浏览器会自动打开一个本地页面（如 http://localhost:8000/viewer_20260609_143021.html），你可以在搜索框中输入关键词，快速定位到对应的帧和描述。
+
+每次运行会自动生成时间戳 ID（格式 `YYYYMMDD_HHMMSS`），所有产出物（帧目录、结果 JSON、展示 HTML）共享同一个时间戳，多次运行互不覆盖。如需查看历史记录，手动启动 HTTP 服务后访问对应的 HTML 文件即可：
+
+```bash
+python -m http.server 8000
+# 浏览器打开 http://localhost:8000/viewer_<时间戳>.html
+```
 
 ---
 
@@ -55,10 +62,10 @@ python run.py <video> --llama <dir> --checkpoint <file> [可选参数...]
 | `video` | **是** | — | 输入视频路径，第一个位置参数，不用加 `--` |
 | `--llama` | **是** | — | LLaMA 3.2 基座模型所在**目录**，即放 `config.json`、`model.safetensors` 等文件的文件夹 |
 | `--checkpoint` | **是** | — | 训练好的 VLM 权重**文件**，即 `.pth` 文件的完整路径 |
-| `-o` / `--output` | 否 | `results.json` | 推理结果保存到的 JSON 文件路径 |
-| `--frames-dir` | 否 | `frames` | 抽帧图片的暂存目录，跑完后不会自动删除 |
+| `-o` / `--output` | 否 | `results_<时间戳>.json` | 推理结果保存到的 JSON 文件路径 |
+| `--frames-dir` | 否 | `frames/<时间戳>` | 帧图片的暂存目录，每次运行自动生成时间戳子目录 |
 | `--prompt` | 否 | `Describe this image in detail.` | 对每一帧向模型提问的文本 |
-| `--output-html` | 否 | `viewer.html` | 生成的可搜索 HTML 页面文件名 |
+| `--output-html` | 否 | `viewer_<时间戳>.html` | 生成的可搜索 HTML 页面文件名 |
 | `--port` | 否 | `8000` | 本地预览服务的端口号（若被占用可修改） |
 
 ### 最小运行命令
@@ -107,7 +114,7 @@ python extract_frames.py video.mp4 -o ./frames
 输出示例：
 
 ```
-frames/
+frames/20260609_143021/
 ├── frame_0000s.jpg   # 第 0 秒
 ├── frame_0001s.jpg   # 第 1 秒
 ├── frame_0002s.jpg   # 第 2 秒
@@ -149,13 +156,12 @@ python generate_viewer.py \
 
 ### 第四步：本地预览
 
-在项目根目录（包含 `viewer.html` 和 `frames/` 的文件夹）启动 HTTP 服务：
+在项目根目录启动 HTTP 服务，然后访问对应时间戳的 HTML 文件：
 
 ```bash
 python -m http.server 8000
+# 浏览器打开 http://localhost:8000/viewer_<时间戳>.html
 ```
-
-浏览器打开 `http://localhost:8000/viewer.html` 即可使用搜索功能。
 
 ---
 
@@ -252,9 +258,9 @@ Image → SigLIP ViT → MLP Projector → <IMG_START> ... <IMG_END> → LLaMA 3
 ├── checkpoints/         # 训练好的模型权重（需下载）
 ├── Llama-3.2-3B/        # LLaMA 基座模型（需下载）
 ├── testpics/            # 测试图片
-├── frames/              # （运行后生成）抽取的帧图片
-├── results.json         # （运行后生成）逐帧描述
-└── viewer.html          # （运行后生成）可检索网页
+├── frames/<时间戳>/              # （运行后生成）抽取的帧图片
+├── results_<时间戳>.json         # （运行后生成）逐帧描述
+└── viewer_<时间戳>.html          # （运行后生成）可检索网页
 ```
 
 ## 环境依赖
