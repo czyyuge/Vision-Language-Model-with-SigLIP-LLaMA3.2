@@ -66,8 +66,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("video", help="Path to input video")
     parser.add_argument("-o", "--output", default="results.json", help="Output JSON path")
-    parser.add_argument("--llama", required=True, help="Path to LLaMA-3.2-3B directory")
-    parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint .pth")
+    parser.add_argument("--llama", default="./Llama-3.2-3B",
+                        help="Path to LLaMA-3.2-3B directory (default: ./Llama-3.2-3B)")
+    parser.add_argument("--checkpoint", default="./checkpoints/checkpoint_epoch1_step28000.pth",
+                        help="Path to model checkpoint .pth (default: ./checkpoints/checkpoint_epoch1_step28000.pth)")
     parser.add_argument("--frames-dir", default="frames", help="Temporary frames directory")
     parser.add_argument("--prompt", default="Describe this image in detail.", help="Prompt for each frame")
     parser.add_argument("--output-html", default="viewer.html", help="Filename for the searchable HTML page")

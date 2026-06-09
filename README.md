@@ -11,7 +11,7 @@
 ### 1. 安装依赖
 
 ```bash
-pip install torch transformers peft pillow opencv-python
+pip install torch transformers peft pillow opencv-python flask-cors
 ```
 
 ### 2. 下载模型

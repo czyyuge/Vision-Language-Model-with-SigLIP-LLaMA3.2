@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>视频文字索引多模态模型</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; }
+        button { padding: 10px 20px; margin-right: 10px; cursor: pointer; background: #4a90d9; color: white; border: none; border-radius: 6px; font-size: 14px; }
+        button:disabled { background: #aaa; cursor: not-allowed; }
+        button:hover:not(:disabled) { background: #357abd; }
+        #logArea { height: 200px; resize: none; background: #fafafa; font-family: monospace; }
+        .hint { font-size: 12px; color: #666; margin-top: 4px; }
+        .advanced-toggle { cursor: pointer; color: #4a90d9; font-size: 14px; margin: 15px 0; }
+        .advanced-section { display: none; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; background: #fafafa; }
+        a.result-link { color: #4a90d9; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center;">🎬 视频文字索引多模态模型</h1>
+        <p style="text-align: center; color: #666;">上传视频，自动抽取每秒帧并生成可搜索的描述索引</p>
+
+        <!-- 必填项：视频文件 -->
+        <div class="form-group">
+            <label>选择视频文件 (必填):</label>
+            <input type="text" id="videoPath" readonly placeholder="请点击下方选择视频">
+            <br>
+            <input type="file" id="videoFile" accept="video/*" style="display: none;">
+            <button type="button" onclick="document.getElementById('videoFile').click()">选择视频</button>
+        </div>
+
+        <!-- 高级设置折叠按钮 -->
+        <div class="advanced-toggle" onclick="toggleAdvanced()">⚙️ 高级设置 ▾</div>
+
+        <!-- 高级设置面板（默认隐藏） -->
+        <div class="advanced-section" id="advancedPanel">
+            <div class="form-group">
+                <label>LLaMA 模型目录 (--llama):</label>
+                <input type="text" id="llamaDir" value="./Llama-3.2-3B">
+                <span class="hint">包含 config.json 等文件的文件夹</span>
+            </div>
+            <div class="form-group">
+                <label>Checkpoint 文件 (--checkpoint):</label>
+                <input type="text" id="checkpointFile" value="./checkpoints/checkpoint_epoch0_step56000.pth">
+                <span class="hint">训练好的 .pth 权重文件路径</span>
+            </div>
+            <div class="form-group">
+                <label>输出 JSON 名称 (-o):</label>
+                <input type="text" id="outJson" value="results.json">
+            </div>
+            <div class="form-group">
+                <label>帧临时目录 (--frames-dir):</label>
+                <input type="text" id="framesDir" value="frames">
+            </div>
+            <div class="form-group">
+                <label>提示词 (--prompt):</label>
+                <input type="text" id="prompt" value="Describe this image in detail.">
+            </div>
+            <div class="form-group">
+                <label>生成的可搜索网页名称 (--output-html):</label>
+                <input type="text" id="outputHtml" value="viewer.html">
+            </div>
+            <div class="form-group">
+                <label>本地预览端口 (--port):</label>
+                <input type="number" id="port" value="8000">
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="form-group">
+            <button id="startBtn">开始处理</button>
+            <button id="openResultBtn" disabled>查看结果页面</button>
+        </div>
+
+        <!-- 日志 -->
+        <div class="form-group">
+            <label>运行日志:</label>
+            <textarea id="logArea" readonly placeholder="任务日志将在这里实时输出..."></textarea>
+        </div>
+        <div id="resultLink" style="margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:5000";
+        let selectedFile = null;
+        let pollingTimer = null;
+
+        // 高级设置折叠
+        function toggleAdvanced() {
+            const panel = document.getElementById("advancedPanel");
+            const btn = document.querySelector(".advanced-toggle");
+            if (panel.style.display === "block") {
+                panel.style.display = "none";
+                btn.innerHTML = "⚙️ 高级设置 ▾";
+            } else {
+                panel.style.display = "block";
+                btn.innerHTML = "⚙️ 高级设置 ▴";
+            }
+        }
+
+        // 启动轮询
+        function startPolling() {
+            if (pollingTimer) clearInterval(pollingTimer);
+            pollingTimer = setInterval(pollStatus, 500);
+        }
+
+        // 停止轮询
+        function stopPolling() {
+            if (pollingTimer) {
+                clearInterval(pollingTimer);
+                pollingTimer = null;
+            }
+        }
+
+        // 轮询状态接口
+        async function pollStatus() {
+            try {
+                const resp = await fetch(`${API_URL}/api/status`);
+                const data = await resp.json();
+                document.getElementById("logArea").value = data.log || "";
+                // 自动滚动到底部
+                const ta = document.getElementById("logArea");
+                ta.scrollTop = ta.scrollHeight;
+
+                if (!data.running) {
+                    stopPolling();
+                    document.getElementById("startBtn").disabled = false;
+                    if (data.error) {
+                        document.getElementById("logArea").value += "\n[ERROR] " + data.error;
+                    } else if (data.result) {
+                        document.getElementById("openResultBtn").disabled = false;
+                        const linkBox = document.getElementById("resultLink");
+                        if (data.html_page) {
+                            linkBox.innerHTML = `<p>✅ 可搜索页面已生成：<a class="result-link" href="/${data.html_page}" target="_blank">打开检索页面</a></p>`;
+                        }
+                    }
+                }
+            } catch (err) {
+                document.getElementById("logArea").value += "\n[轮询失败] " + err.message;
+            }
+        }
+
+        // 开始处理
+        async function runTask() {
+            if (!selectedFile) {
+                alert("请先选择视频文件!");
+                return;
+            }
+
+            const startBtn = document.getElementById("startBtn");
+            startBtn.disabled = true;
+            document.getElementById("openResultBtn").disabled = true;
+            document.getElementById("logArea").value = "正在提交任务...";
+            document.getElementById("resultLink").innerHTML = "";
+
+            const formData = new FormData();
+            formData.append("video", selectedFile);
+            formData.append("llama", document.getElementById("llamaDir").value);
+            formData.append("checkpoint", document.getElementById("checkpointFile").value);
+            formData.append("output", document.getElementById("outJson").value);
+            formData.append("prompt", document.getElementById("prompt").value);
+            formData.append("frames_dir", document.getElementById("framesDir").value);
+            formData.append("output_html", document.getElementById("outputHtml").value);
+            formData.append("port", document.getElementById("port").value);
+
+            try {
+                const resp = await fetch(`${API_URL}/api/run`, {
+                    method: "POST",
+                    body: formData
+                });
+                const result = await resp.json();
+                if (result.status === "started") {
+                    document.getElementById("logArea").value = "任务已启动，等待日志输出...\n";
+                    startPolling();
+                } else {
+                    alert("启动失败: " + result.msg);
+                    startBtn.disabled = false;
+                }
+            } catch (err) {
+                document.getElementById("logArea").value = "请求失败: " + err.message;
+                startBtn.disabled = false;
+            }
+        }
+
+        // 绑定事件
+        document.getElementById("startBtn").addEventListener("click", runTask);
+        document.getElementById("videoFile").addEventListener("change", function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                selectedFile = file;
+                document.getElementById("videoPath").value = file.name;
+            }
+        });
+        document.getElementById("openResultBtn").addEventListener("click", function() {
+            window.open('/' + document.getElementById("outputHtml").value, '_blank');
+        });
+    </script>
+</body>
+</html>
