@@ -5,6 +5,7 @@ import time
 import threading
 import webbrowser
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+import shutil
 from extract_frames import extract_frames
 from batch_inference import batch_inference
 from generate_viewer import generate_viewer
@@ -34,7 +35,7 @@ def serve_and_open(port, root_dir, html_filename):
 
 def run(video_path, output_json, llama_path, checkpoint_path,
         frames_dir="frames", prompt=None,
-        output_html="viewer.html", port=8000):
+        output_html="viewer.html", port=8000, cleanup=True):
     # Step 1: extract frames
     print("=" * 50)
     print("Step 1/3: Extracting frames from video ...")
@@ -49,6 +50,11 @@ def run(video_path, output_json, llama_path, checkpoint_path,
     if prompt:
         kwargs["prompt"] = prompt
     batch_inference(frames_dir, output_json, llama_path, checkpoint_path, **kwargs)
+
+    # cleanup temporary frames
+    if cleanup and os.path.isdir(frames_dir):
+        shutil.rmtree(frames_dir)
+        print(f"\nCleaned up temporary frames directory: {frames_dir}")
 
     # Step 3: generate searchable HTML viewer
     print("\n" + "=" * 50)
@@ -74,8 +80,9 @@ if __name__ == "__main__":
     parser.add_argument("--prompt", default="Describe this image in detail.", help="Prompt for each frame")
     parser.add_argument("--output-html", default="viewer.html", help="Filename for the searchable HTML page")
     parser.add_argument("--port", type=int, default=8000, help="Local server port for preview")
+    parser.add_argument("--keep-frames", action="store_true", help="Keep temporary frames directory after completion")
     args = parser.parse_args()
 
     run(args.video, args.output, args.llama, args.checkpoint,
-        args.frames_dir, args.prompt,
-        args.output_html, args.port)
+        args.frames_dir, args.prompt, 
+        args.output_html, args.port, cleanup=not args.keep_frames)
