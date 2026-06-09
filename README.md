@@ -54,9 +54,8 @@ python run.py <video> --llama <dir> --checkpoint <file> [可选参数...]
 | `--llama` | **是** | — | LLaMA 3.2 基座模型所在**目录**，即放 `config.json`、`model.safetensors` 等文件的文件夹 |
 | `--checkpoint` | **是** | — | 训练好的 VLM 权重**文件**，即 `.pth` 文件的完整路径 |
 | `-o` / `--output` | 否 | `results.json` | 推理结果保存到的 JSON 文件路径 |
-| `--frames-dir` | 否 | `frames` | 抽帧图片的暂存目录，跑完后自动删除 |
+| `--frames-dir` | 否 | `frames` | 抽帧图片的暂存目录 |
 | `--prompt` | 否 | `Describe this image in detail.` | 对每一帧向模型提问的文本 |
-| `--keep-frames` | 否 | — | 保留暂存帧目录，不自动删除 |
 
 ### 最小运行命令
 
@@ -152,14 +151,13 @@ python batch_inference.py \
 ## 完整流程
 
 ```
-视频输入 → 每秒抽帧 → VLM 推理 → 逐帧描述输出（JSON）→ 自动清理帧缓存
+视频输入 → 每秒抽帧 → VLM 推理 → 逐帧描述输出（JSON）
 ```
 
 内部两步对应：
 
 1. `extract_frames.py` — 读取视频，按 FPS 计算间隔，每秒保存一张图片
 2. `batch_inference.py` — 加载模型（仅一次），遍历所有帧逐一生成描述
-3. 推理完成后自动清理暂存帧目录（可通过 `--keep-frames` 保留）
 
 ---
 
