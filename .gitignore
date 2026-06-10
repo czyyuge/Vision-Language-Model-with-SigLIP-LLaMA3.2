@@ -6,5 +6,6 @@ __pycache__/
 frames/
 *.pth
 *.mp4
+*.png
 results.json
 viewer.html
